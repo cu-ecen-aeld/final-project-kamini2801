@@ -7,6 +7,6 @@ This repository contains the final project submission by Kamini Budke and Sanish
 ## Project Schedule
 [Project Schedule Page](https://github.com/cu-ecen-aeld/final-project-kamini2801/wiki/Project-Schedule)
 
-Team Members
+## Team Members  
 Kamini Budke (kamini.budke@colorado.edu)   
 Sanish Kharade (sanish.kharade@colorado.edu)
