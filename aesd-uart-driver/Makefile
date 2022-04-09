@@ -14,7 +14,7 @@ EXTRA_CFLAGS += $(DEBFLAGS)
 ifneq ($(KERNELRELEASE),)
 # call from kernel build system
 obj-m	:= aesduart.o
-aesduart-y := aesd-uart-circular-buffer.o main.o
+aesduart-y := main.o
 else
 
 KERNELDIR ?= /lib/modules/$(shell uname -r)/build
@@ -27,4 +27,3 @@ endif
 
 clean:
 	rm -rf *.o *~ core .depend .*.cmd *.ko *.mod.c .tmp_versions
-

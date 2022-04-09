@@ -1,454 +1,346 @@
-/**
- * @file main.c
- * @brief Functions and data related to the AESD char driver implementation
- *
- * Based on the implementation of the "scull" device driver, found in
- * Linux Device Drivers example code.
- *
- * @author Dan Walkes, Modified by Sanish Kharade
- * @date 2019-10-22
- * @copyright Copyright (c) 2019
- *
- */
-#include <linux/uaccess.h>
+/*
+*  hw_serial.c - A "Hello World" serial UART driver for the Beaglebone Black
+*
+*  Copyright (C) 2020, Alex Rhodes <https://www.alexrhodes.io>
+* 
+*
+*  This program is free software; you can redistribute it and/or modify
+*  it under the terms of the GNU General Public License as published by
+*  the Free Software Foundation; either version 3 of the License, or (at
+*  your option) any later version.
+*
+*  This program is distributed in the hope that it will be useful, but
+*  WITHOUT ANY WARRANTY; without even the implied warranty of
+*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+*  General Public License for more details.
+*
+*  <https://www.gnu.org/licenses/gpl-3.0.html>
+* 
+*/
+
+#include <linux/miscdevice.h>
+#include <linux/fs.h>
+#include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/serial_reg.h>
+#include <linux/of.h>
+#include <linux/io.h>
+#include <linux/pm_runtime.h>
+#include <linux/platform_device.h>
 #include <linux/init.h>
-#include <linux/printk.h>
-#include <linux/types.h>
-#include <linux/cdev.h>
-#include <linux/fs.h> 		// file_operations
+#include <linux/uaccess.h>
+#include <linux/irqreturn.h>
+#include <linux/wait.h>
+#include <linux/interrupt.h>
+#include <linux/spinlock.h>
 
-#include <linux/slab.h>		// for kmalloc and kfree
+#define BUFF_SIZE 512
 
-#ifdef __KERNEL__
-#include <linux/string.h>
-#else
-#include <string.h>
-//#include <stdio.h>
-#endif
-
-#include "aesdchar.h"
-int aesd_major =   0; // use dynamic major
-int aesd_minor =   0;
-
-MODULE_AUTHOR("Sanish Kharade");
-MODULE_LICENSE("Dual BSD/GPL");
-
-struct aesd_dev aesd_device;
-
-
-void debug_print_string(char *s, size_t n);
-
-// Function to print strings without \0 at the end
-void debug_print_string(char *s, size_t n)
-{	
-	if(s == NULL)
-	{
-		printk(KERN_CONT "(null)\n");
-	}
-	else
-	{
-		int i = 0;
-		for(i = 0; i < n; i++)
-		{
-			printk(KERN_CONT "%c", s[i]);
-		}
-	}
-}
-
-// This function is called whenever a file refereing to this driver is opened
-int aesd_open(struct inode *inode, struct file *filp)
+//Circular buffer struct
+static struct circ_buff
 {
-	PDEBUG("open\n\n");
-	/**
-	 * TODO: handle open
-	 * 
-	 * Set filep->private_data to aesd_dev struct
-	 * To get a pointer to aesd_dev struct use inode->i_cdev with container_of
-	 * Now filep has the private_data member setup to aesd_dev and can be used in other functions
-	 */
-
-	/*
-	 *	To get the pointer of aesd_dev structure we need to use container_of MACRO
-	 *	Ref LDD3 pg 58 
-	*/
-	// struct aesd_dev *dev;
-
-	// dev = container_of(inode->i_cdev, struct aesd_dev, cdev);
-
-	// filp->private_data = dev;
-	
-	return 0;
-
-}
-
-// This function is called whenever a file refereing to this driver is released
-int aesd_release(struct inode *inode, struct file *filp)
-{
-	PDEBUG("release\n\n");
-	/**
-	 * TODO: handle release
-	 */
-	return 0;
-}
-
-/**
- *	@name 	: aesd_read
- *
- *	@param	
- *			: count		- number of bytes to read
-						- (OR) max number of bytes to write to buf
- *			: buf		- buffer from user space that this function will fill
- *			: f_pos 	- pointer to the read offset
- *						  references a specific byte (char_offset) of the circular buffer linear content
- * 						  See aesd_circular_buffer_find_entry_offset_for_fpos for char_offset
- * 	
- *  @return : ssize_t	- number of bytes read
- * 
- * 	@note 	: Do appropriate locking in this function
- * 			  This function is using the partial read rule
-
-*/
-ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
-                loff_t *f_pos)
-{
-	PDEBUG("Start of aesd_uart_read function\n");
-	
-	
-	ssize_t bytes_read = 0;
-
-	// struct aesd_buffer_entry *read_entry = NULL;
-	// ssize_t read_offset = 0;
-	// size_t rem_bytes = 0;
-	// size_t unread_bytes;
-	
-	// // For accessing the circular buffer
-	// struct aesd_dev *dev;
-	// dev = (struct aesd_dev *) filp->private_data;
-
-	// /**
-	//  * TODO: handle read
-	//  * filep has the private_data member setup to aesd_dev by the open function
-	//  * Thus we can access pointer to aesd_dev here
-	//  * 
-	//  * Since buf is a user space buffer we need to use copy_to_user to access it
-	//  */
-
-	// // offset
-	// // when count > number of bytes left in current entry, bytes read = size - offset - 1
-	// // user should update fpos = fpos + bytes read
-
-	// // else bytes read = count
-	// PDEBUG("in_offset = %d, out_offset = %d, f_pos = %lld\n",dev->aesd_cbuf.in_offs, dev->aesd_cbuf.out_offs, *f_pos);
-
-	// // Lock the resource
-	// if(mutex_lock_interruptible(&(dev->lock)) != 0)
-	// {
-	// 	printk(KERN_ALERT "Mutex lock failed in aesd_read \n");
-	// 	return -ERESTARTSYS;
-
-	// }
-	// read_entry = aesd_circular_buffer_find_entry_offset_for_fpos(&(dev->aesd_cbuf), *f_pos, &read_offset);
-	// if(read_entry != NULL)
-	// {
-	// 	//PDEBUG("entry = %s, read_offset = %zu\n", read_entry->buffptr, read_offset);
-	// 	// Uncomment the below loop to print the entry from which we are reading
-	// 	/*
-	// 	PDEBUG("Entry = ");
-	// 	debug_print_string(read_entry->buffptr, read_entry->size);
-	// 	PDEBUG("Read_offset = %zu\n", read_offset);
-	// 	*/
-	// }
-	// else
-	// {
-	// 	// nothing more to read
-	// 	mutex_unlock(&(dev->lock));
-	// 	return 0;
-	// }
-	// mutex_unlock(&(dev->lock));
-
-	// rem_bytes = read_entry->size - read_offset;
-	// if(count > rem_bytes)
-	// {
-	// 	bytes_read = rem_bytes;
-	// }
-	// else
-	// {
-	// 	bytes_read = count;
-	// }
-
-	// unread_bytes = copy_to_user(buf, (void*)(read_entry->buffptr + read_offset), bytes_read);
-	// if(unread_bytes != 0)
-	// {
-	// 	printk(KERN_ALERT "Unable to copy all bytes to user\n");
-	// 	return -EFAULT;
-	// }
-	// else
-	// {
-	// 	printk(KERN_ALERT "Copied %ld bytes to user\n", bytes_read);
-	// }
-
-	// *f_pos += bytes_read;
-
-	PDEBUG("End of aesd_read function\n\n");
-
-	// Return the number of bytes read
-	return bytes_read;
-}
-/**
- *	@name 	: aesd_write
- *
- *	@param	: f_pos 	- typically location to write at
-						- A8 will ignore this and follow previous rules of new/ongoing buffer
- *			: count		- number of bytes to write
- * 	
- *  @return : ssize_t	- number of bytes written
- * 
- * 	@note 	: 	Do appropriate locking in this function
- * 
- * 				Any write operation that doesn't end with a \n must not increment the offset pointer
- * 				Next write should happen in the same buffer location until a \n is received
- * 
- * 				If buffer is full we need to free the memory assigned for the oldest command before 
- * 				assigning new memory for the latest command and overwriting the oldest one
-*/
-ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count, loff_t *f_pos)
-{
-	PDEBUG("Start of aesd_write function\n");
-	// ssize_t retval = -ENOMEM;
-
-	// char *overwritten_buf = NULL;
-	
-	// static size_t total_count;
-
-	// struct aesd_dev *dev = NULL;
-	// dev = (struct aesd_dev *) filp->private_data;
-	
-	// // change to bool later
-	// static uint8_t write_complete = 1;
-
-	// total_count += count;
-
-	// size_t unwritten_bytes = 0;
-	// /**
-	//  * 	Check if the previous write was complete (complete if it had a \n character)
-	//  * 		If it was then we need to malloc new memory for the current write operation
-	//  * 		else we need to realloc the previoiusly assigned memory
-	//  * 
-	//  */
-
-	// /**
-	//  * 	All below operations use dev which is the file's private data
-	//  * 	Hence these operations need to be locked by a mutex
-	//  */
-	// if(mutex_lock_interruptible(&(dev->lock)) != 0)
-	// {
-	// 	printk(KERN_ALERT "Mutex lock failed in aesd_write\n");
-	// 	return -ERESTARTSYS;
-
-	// }
-	// if(write_complete)
-	// {
-	// 	dev->aesd_cb_entry->buffptr = (char*)kmalloc(count, GFP_KERNEL);
-	// 	if(dev->aesd_cb_entry->buffptr == NULL)
-	// 	{
-	// 		printk(KERN_ALERT "Unable to mallocin aesd_write\n");
-	// 		mutex_unlock(&(dev->lock));
-	// 		return -ENOMEM;
-	// 	}
-
-	// 	// use copy_from_user to copy data into kernel
-	// 	unwritten_bytes = copy_from_user((void*)(dev->aesd_cb_entry->buffptr), buf, count);
-	// 	if(unwritten_bytes != 0)
-	// 	{
-	// 		printk(KERN_ALERT "Unable to copy all bytes into kernel\n");
-	// 		mutex_unlock(&(dev->lock));
-	// 		return -EFAULT;
-	// 	}
-	// 	else
-	// 	{
-	// 		PDEBUG("Copied %ld bytes into the kernel\n", count-unwritten_bytes);
-	// 	}
-	// }
-	// else
-	// {
-	// 	dev->aesd_cb_entry->buffptr = (char*)krealloc(dev->aesd_cb_entry->buffptr, total_count, GFP_KERNEL);
-	// 	if(dev->aesd_cb_entry->buffptr == NULL)
-	// 	{
-	// 		// handle error
-	// 		printk(KERN_ALERT "Unable to krealloc in aesd_write\n");
-	// 		mutex_unlock(&(dev->lock));
-	// 		return -ENOMEM;
-	// 	}
-
-	// 	// use copy_from_user to copy data into kernel
-	// 	unwritten_bytes = copy_from_user((void*)(dev->aesd_cb_entry->buffptr + total_count - count), buf, count);
-	// 	if(unwritten_bytes != 0)
-	// 	{
-	// 		printk(KERN_ALERT "Unable to copy all bytes into kernel\n");
-	// 		mutex_unlock(&(dev->lock));
-	// 		return -EFAULT;
-	// 	}
-	// 	else
-	// 	{
-	// 		PDEBUG("Copied %ld bytes into the kernel\n", count-unwritten_bytes);
-	// 	}
-		
-	// }
-	// //memcpy(dev->aesd_cb_entry->buffptr + total_count, "\0", 1);
-	// if(memchr(dev->aesd_cb_entry->buffptr, '\n', total_count) != NULL)
-	// {
-	// 	dev->aesd_cb_entry->size = total_count;
-	// 	total_count = 0;
-	// 	write_complete = 1;
-
-	// 	overwritten_buf = aesd_circular_buffer_add_entry(&(dev->aesd_cbuf),(dev->aesd_cb_entry));
-	// 	if(overwritten_buf != NULL)
-	// 	{
-	// 		//PDEBUG("Freeing : %s\n", overwritten_buf);
-	// 		kfree(overwritten_buf);
-	// 	}
-	// }
-	// else
-	// {
-	// 	write_complete = 0;
-	// }
-
-	// // Uncomment the below loop to print the circular buffer on every write operation
-	// /*
-	// int j = 0;
-	// for(j = 0; j < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED; j++)
-	// {
-	// 	//PDEBUG("entry %d = %s", j, dev->aesd_cbuf.entry[j].buffptr);
-	// 	PDEBUG("Entry %d = ", j);
-	// 	debug_print_string(dev->aesd_cbuf.entry[j].buffptr, dev->aesd_cbuf.entry[j].size);
-	// }
-	// */
-	
-	// mutex_unlock(&(dev->lock));
-	PDEBUG("End of aesd_write function\n\n");
-
-	// return number of bytes written
-	return count;
-
-}
-
-// The file operations structure
-struct file_operations aesd_fops = {
-	.owner =    THIS_MODULE,
-	.read =     aesd_read,
-	.write =    aesd_write,
-	.open =     aesd_open,
-	.release =  aesd_release,
+    char buff[BUFF_SIZE];
+    int read_pos;
+    int write_pos;
+    int length;
 };
 
-// Setup the cdev member the aesd device structure
-static int aesd_setup_cdev(struct aesd_dev *dev)
+//Serial device struct
+static struct hw_serial_dev
 {
-	int err, devno = MKDEV(aesd_major, aesd_minor);
+    void __iomem *regs;
+    struct miscdevice mDev;
+    int irq;
+    struct circ_buff buf;
+    wait_queue_head_t waitQ;
+    unsigned long irqFlags;
+    spinlock_t lock;
 
-	cdev_init(&dev->cdev, &aesd_fops);
-	dev->cdev.owner = THIS_MODULE;
-	dev->cdev.ops = &aesd_fops;
-	err = cdev_add (&dev->cdev, devno, 1);
-	if (err) {
-		printk(KERN_ERR "Error %d adding aesd cdev", err);
+};
+
+//Driver probe routine
+static int hw_probe(struct platform_device *pdev);
+
+//Driver remove routine
+static int hw_remove(struct platform_device *pdev);
+
+//FOPS open
+static int hw_open(struct inode *inode, struct file *file);
+
+//FOPS close
+static int hw_close(struct inode *inodep, struct file *filp);
+
+//FOPS read
+static ssize_t hw_read(struct file *file, char __user *buf, size_t size, loff_t *ppos);
+
+//FOPS write
+static ssize_t hw_write(struct file *file, const char __user *buf, size_t len, loff_t *ppos);
+
+//Routine to read from serial device registers
+static unsigned int reg_read(struct hw_serial_dev *dev, int offset);
+
+//Routine to write to serial device registers
+static void reg_write(struct hw_serial_dev *dev, int val, int offset);
+
+//Routine to write a character to the seriald device
+static void write_char(struct hw_serial_dev *dev, char test);
+
+//Interrupt handler
+static irqreturn_t irqHandler(int irq, void *devid);
+
+//Utility method to write to circular buffer
+static void write_circ_buff(char c, struct hw_serial_dev *dev);
+
+//Utility method to read from circular buff
+static char read_circ_buff(struct hw_serial_dev *dev);
+
+//Device id struct
+static struct of_device_id hw_match_table[] =
+    {
+        {
+            .compatible = "serial",
+        },
+};
+
+//File operations struct
+static const struct file_operations hw_fops = {
+    .owner = THIS_MODULE,
+    .read = hw_read,
+    .write = hw_write,
+    .open = hw_open,
+    .release = hw_close,
+    .llseek = no_llseek,
+};
+
+//Platform driver structure
+static struct platform_driver hw_plat_driver = {
+    .driver = {
+        .name = "serial",
+        .owner = THIS_MODULE,
+        .of_match_table = hw_match_table},
+    .probe = hw_probe,
+    .remove = hw_remove
+};
+
+/*********************************************************/
+static int hw_open(struct inode *inode, struct file *file)
+{
+    return 0;
+}
+/*********************************************************/
+static int hw_close(struct inode *inodep, struct file *filp)
+{
+    return 0;
+}
+/*********************************************************/
+static ssize_t hw_read(struct file *file, char __user *buf, size_t size, loff_t *ppos)
+{
+    struct miscdevice *mdev = (struct miscdevice *)file->private_data;
+    struct hw_serial_dev *dev = container_of(mdev, struct hw_serial_dev, mDev);
+    wait_event_interruptible(dev->waitQ, dev->buf.length > 0);
+
+    char ret = read_circ_buff(dev);
+    copy_to_user(buf, &ret, 1);
+    return 1;
+}
+/*********************************************************/
+static ssize_t hw_write(struct file *file, const char __user *buf, size_t len, loff_t *ppos)
+{
+    struct miscdevice *mdev = (struct miscdevice *)file->private_data;
+    struct hw_serial_dev *dev = container_of(mdev, struct hw_serial_dev, mDev);
+
+    char kmem[len + 1];
+    copy_from_user(kmem, buf, len);
+    int i;
+    for (i = 0; i < len; i++)
+    {
+        if (kmem[i] == '\n')
+        {
+            write_char(dev, '\n');
+            write_char(dev, '\r');
+        }
+        else
+        {
+            write_char(dev, kmem[i]);
+        }
+    }   
+    return len;
+}
+
+/*********************************************************/
+static unsigned int reg_read(struct hw_serial_dev *dev, int offset)
+{
+    spin_lock_irqsave(&dev->lock, dev->irqFlags);
+    unsigned int ret = ioread32(dev->regs + (4 * offset));
+    spin_unlock_irqrestore(&dev->lock, dev->irqFlags);
+    return ret;
+}
+
+/*********************************************************/
+static void reg_write(struct hw_serial_dev *dev, int val, int offset)
+{
+    spin_lock_irqsave(&dev->lock, dev->irqFlags);
+    iowrite32(val, dev->regs + (4 * offset));
+    spin_unlock_irqrestore(&dev->lock, dev->irqFlags);
+    return;
+}
+
+/*********************************************************/
+static void write_char(struct hw_serial_dev *dev, char c)
+{
+    unsigned int lsr = reg_read(dev, UART_LSR);
+    while (1)
+    {
+        if (lsr & UART_LSR_THRE)
+        {
+            break;
+        }
+        lsr = reg_read(dev, UART_LSR);
+    }
+    reg_write(dev, c, UART_TX);
+}
+
+/*********************************************************/
+static irqreturn_t irqHandler(int irq, void *d)
+{
+    struct hw_serial_dev *dev = d;
+    do 
+    {
+        char recv = reg_read(dev, UART_RX);
+        write_circ_buff(recv, dev);
+        wake_up(&dev->waitQ);
+    }
+    while (reg_read(dev, UART_LSR) & UART_LSR_DR);
+    return IRQ_HANDLED;
+}
+
+/*********************************************************/
+static void write_circ_buff(char c, struct hw_serial_dev *dev)
+{
+    spin_lock_irqsave(&dev->lock, dev->irqFlags);
+    if(dev->buf.length < BUFF_SIZE)
+    {
+        dev->buf.buff[dev->buf.write_pos] = c;
+        dev->buf.write_pos = ((dev->buf.write_pos + 1) % BUFF_SIZE);
+        dev->buf.length++;
+    }
+    spin_unlock_irqrestore(&dev->lock, dev->irqFlags);
+}
+
+/*********************************************************/
+static char read_circ_buff(struct hw_serial_dev *dev)
+{
+    spin_lock_irqsave(&dev->lock, dev->irqFlags);
+    char c = dev->buf.buff[dev->buf.read_pos];
+    dev->buf.buff[dev-> buf.read_pos] = '\0';
+    if(dev->buf.length > 0)
+    {
+        dev->buf.buff[dev->buf.read_pos] = '\0';
+        dev->buf.read_pos = ((dev->buf.read_pos + 1 ) % BUFF_SIZE);
+        dev->buf.length--;
+    }
+    spin_unlock_irqrestore(&dev->lock, dev->irqFlags);
+    return c;
+}
+
+
+/*********************************************************/
+static int hw_probe(struct platform_device *pdev)
+{
+    struct resource *res;
+    res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+
+    if (!res)
+    {
+        pr_err("%s: platform_get_resource returned NULL\n", __func__);
+        return -EINVAL;
+    }
+
+    struct hw_serial_dev *dev = devm_kzalloc(&pdev->dev, sizeof(struct hw_serial_dev), GFP_KERNEL);
+    if (!dev)
+    {
+        pr_err("%s: devm_kzalloc returned NULL\n", __func__);
+        return -ENOMEM;
+    }
+    dev->regs = devm_ioremap_resource(&pdev->dev, res);
+
+    if (IS_ERR(dev->regs))
+    {
+        dev_err(&pdev->dev, "%s: Can not remap registers\n", __func__);
+        return PTR_ERR(dev->regs);
+    }
+    
+    //Configure interrupts
+    dev->irq = platform_get_irq(pdev, 0);
+	if (dev->irq < 0) {
+		dev_err(&pdev->dev, "%s: unable to get IRQ\n", __func__);
+		return dev->irq;
 	}
-	return err;
-}
-
-// This function runs when the module is loaded in the kernel
-int aesd_init_module(void)
-{
-	dev_t dev = 0;
-	int result;
-	PDEBUG("Loading AESD UART Driver\n");
-	PDEBUG("Start of aesd_init_module function\n");
-
-	/*
-	 *	int alloc_chrdev_region(dev_t * dev, unsigned baseminor, unsigned count, const char * name);
-	 * 	Dynamic allocation of major number
-	*/
-	result = alloc_chrdev_region(&dev, aesd_minor, 1,
-			"aesduart");
-
-	// Get major number from dev
-	aesd_major = MAJOR(dev);
-	if (result < 0)
-	{
-		printk(KERN_WARNING "Can't get major %d\n", aesd_major);
-		return result;
+	int ret = devm_request_irq(&pdev->dev, dev->irq, irqHandler, 0, "hw_serial", dev);
+	if (ret < 0) 
+    {
+		dev_err(&pdev->dev, "%s: unable to request IRQ %d (%d)\n", __func__, dev->irq, ret);
+		return ret;
 	}
-	memset(&aesd_device,0,sizeof(struct aesd_dev));
+    dev->buf.read_pos = 0;
+    dev->buf.write_pos = 0;
+    dev->buf.buff[0] = '\0';
+    dev->buf.length = 0;
+    init_waitqueue_head(&dev->waitQ);
 
-	/**
-	 * TODO: initialize the AESD specific portion of the device
-	 * 
-	 * Initialize the circular buffer 
-	 * Initialize locking primitive
-	 */
-	// aesd_circular_buffer_init(&(aesd_device.aesd_cbuf));
+    //Enable power management runtime
+    pm_runtime_enable(&pdev->dev);
+    pm_runtime_get_sync(&pdev->dev);
 
-	// // This memory is freed in cleanup function
-	// aesd_device.aesd_cb_entry = kmalloc(sizeof(struct aesd_buffer_entry), GFP_KERNEL);
-	// if (aesd_device.aesd_cb_entry == NULL)
-	// {
-	// 	printk(KERN_ALERT "kmalloc failed in init function\n");
-	// 	return -ENOMEM;
-	// }
+    //Configure the UART device
+    unsigned int baud_divisor;
+    unsigned int uartclk;
 
-	// mutex_init(&(aesd_device.lock));
+    of_property_read_u32(pdev->dev.of_node, "clock-frequency", &uartclk);
 
-	// /**
-	//  * TODO: malloc the entry inside aesd device
-	// */
-	// result = aesd_setup_cdev(&aesd_device);
-	// if( result ) {
-	// 	unregister_chrdev_region(dev, 1);
-	// }
+    baud_divisor = uartclk / 16 / 115200;
 
-	PDEBUG("End of aesd_init_module function\n");
-	return result;
+    reg_write(dev, UART_OMAP_MDR1_DISABLE, UART_OMAP_MDR1);
+    reg_write(dev, 0x00, UART_LCR);
+    reg_write(dev, UART_LCR_DLAB, UART_LCR);
+    reg_write(dev, baud_divisor & 0xff, UART_DLL);
+    reg_write(dev, (baud_divisor >> 8) & 0xff, UART_DLM);
+    reg_write(dev, UART_LCR_WLEN8, UART_LCR);
+    reg_write(dev, UART_FCR_CLEAR_RCVR | UART_FCR_CLEAR_XMIT | UART_FCR_ENABLE_FIFO, UART_FCR);
 
+    reg_write(dev, UART_OMAP_MDR1_16X_MODE, UART_OMAP_MDR1);
+
+    //Initialize and register a misc device
+    dev->mDev.minor = MISC_DYNAMIC_MINOR;
+    dev->mDev.name = devm_kasprintf(&pdev->dev, GFP_KERNEL, "hw_serial-%x", res->start);
+    dev->mDev.fops = &hw_fops;
+
+    int error = misc_register(&dev->mDev);
+    if (error)
+    {
+        pr_err("%s: misc register failed.", __func__);
+        return error;
+    }
+
+    dev_set_drvdata(&pdev->dev, dev);
+
+    //Enable RX interrupt
+    reg_write(dev, UART_IER_RDI, UART_IER);
+
+    return 0;
 }
 
-// This function is called when the module is unloaded
-void aesd_cleanup_module(void)
+/*********************************************************/
+static int hw_remove(struct platform_device *pdev)
 {
-	uint8_t index;
-	struct aesd_buffer_entry *entry;
-
-	// Get the dev number from major and minor numbers
-	dev_t devno = MKDEV(aesd_major, aesd_minor);
-
-	cdev_del(&aesd_device.cdev);
-
-	/**
-	 * TODO: cleanup AESD specific poritions here as necessary
-	 * 
-	 * Free memory associated the driver
-	 * Uninitialize everything
-	 * 
-	 */
-
-	// kfree(aesd_device.aesd_cb_entry);
-
-	// // Free all non NULL entries in the circular buffer
-	// AESD_CIRCULAR_BUFFER_FOREACH(entry, &(aesd_device.aesd_cbuf), index)
-  	// {
-	// 	/*
-	// 	 *	Only free the entry if it is not NULL
-	// 	 *	It can be NULL when the buffer was filled with entries < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED
-	// 	 *	and the driver was unloaded
-	// 	*/	
-	// 	if(entry->buffptr != NULL)
-	// 	{
-	// 		kfree(entry->buffptr);
-	// 	}
-  	// }
-	unregister_chrdev_region(devno, 1);
+    pm_runtime_disable(&pdev->dev);
+    struct hw_serial_dev *dev = dev_get_drvdata(&pdev->dev);
+    misc_deregister(&dev->mDev);
+    return 0;
 }
 
-// Register the init and exit functions
-module_init(aesd_init_module);
-module_exit(aesd_cleanup_module);
+MODULE_AUTHOR("Alex Rhodes");
+MODULE_LICENSE("GPL");
+
+//Register the platform driver
+module_platform_driver(hw_plat_driver);
