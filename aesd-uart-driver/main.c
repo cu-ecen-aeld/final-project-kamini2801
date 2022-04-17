@@ -125,6 +125,7 @@ static struct platform_driver hw_plat_driver = {
 /*********************************************************/
 static int hw_open(struct inode *inode, struct file *file)
 {
+    printk(KERN_ERR "HW_OPEN\n");    
     return 0;
 }
 /*********************************************************/
@@ -135,23 +136,35 @@ static int hw_close(struct inode *inodep, struct file *filp)
 /*********************************************************/
 static ssize_t hw_read(struct file *file, char __user *buf, size_t size, loff_t *ppos)
 {
+    
+    char ret, ret_err;
     struct miscdevice *mdev = (struct miscdevice *)file->private_data;
     struct hw_serial_dev *dev = container_of(mdev, struct hw_serial_dev, mDev);
     wait_event_interruptible(dev->waitQ, dev->buf.length > 0);
+        
 
-    char ret = read_circ_buff(dev);
-    copy_to_user(buf, &ret, 1);
+    ret = read_circ_buff(dev);
+    printk(KERN_ERR "HW_READ: %c\n", ret);
+    ret_err = copy_to_user(buf, &ret, 1);
+    if(ret_err < 0)
+    {
+        printk(KERN_ERR "copy to user failed\n");
+    }
     return 1;
 }
 /*********************************************************/
 static ssize_t hw_write(struct file *file, const char __user *buf, size_t len, loff_t *ppos)
 {
+    int i, ret_err;
     struct miscdevice *mdev = (struct miscdevice *)file->private_data;
     struct hw_serial_dev *dev = container_of(mdev, struct hw_serial_dev, mDev);
 
     char kmem[len + 1];
-    copy_from_user(kmem, buf, len);
-    int i;
+    ret_err = copy_from_user(kmem, buf, len);
+    if(ret_err < 0) 
+    {
+        printk(KERN_ERR "copy from user failed\n");
+    }
     for (i = 0; i < len; i++)
     {
         if (kmem[i] == '\n')
@@ -170,8 +183,9 @@ static ssize_t hw_write(struct file *file, const char __user *buf, size_t len, l
 /*********************************************************/
 static unsigned int reg_read(struct hw_serial_dev *dev, int offset)
 {
+    unsigned int ret;
     spin_lock_irqsave(&dev->lock, dev->irqFlags);
-    unsigned int ret = ioread32(dev->regs + (4 * offset));
+    ret = ioread32(dev->regs + (4 * offset));
     spin_unlock_irqrestore(&dev->lock, dev->irqFlags);
     return ret;
 }
@@ -230,8 +244,9 @@ static void write_circ_buff(char c, struct hw_serial_dev *dev)
 /*********************************************************/
 static char read_circ_buff(struct hw_serial_dev *dev)
 {
+    char c; 
     spin_lock_irqsave(&dev->lock, dev->irqFlags);
-    char c = dev->buf.buff[dev->buf.read_pos];
+    c = dev->buf.buff[dev->buf.read_pos];
     dev->buf.buff[dev-> buf.read_pos] = '\0';
     if(dev->buf.length > 0)
     {
@@ -248,6 +263,12 @@ static char read_circ_buff(struct hw_serial_dev *dev)
 static int hw_probe(struct platform_device *pdev)
 {
     struct resource *res;
+    struct hw_serial_dev *dev;
+    int ret;
+    unsigned int baud_divisor;
+    unsigned int uartclk;
+    int error;
+
     res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 
     if (!res)
@@ -256,7 +277,7 @@ static int hw_probe(struct platform_device *pdev)
         return -EINVAL;
     }
 
-    struct hw_serial_dev *dev = devm_kzalloc(&pdev->dev, sizeof(struct hw_serial_dev), GFP_KERNEL);
+    dev = devm_kzalloc(&pdev->dev, sizeof(struct hw_serial_dev), GFP_KERNEL);
     if (!dev)
     {
         pr_err("%s: devm_kzalloc returned NULL\n", __func__);
@@ -276,7 +297,7 @@ static int hw_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "%s: unable to get IRQ\n", __func__);
 		return dev->irq;
 	}
-	int ret = devm_request_irq(&pdev->dev, dev->irq, irqHandler, 0, "hw_serial", dev);
+	ret = devm_request_irq(&pdev->dev, dev->irq, irqHandler, 0, "hw_serial", dev);
 	if (ret < 0) 
     {
 		dev_err(&pdev->dev, "%s: unable to request IRQ %d (%d)\n", __func__, dev->irq, ret);
@@ -293,8 +314,7 @@ static int hw_probe(struct platform_device *pdev)
     pm_runtime_get_sync(&pdev->dev);
 
     //Configure the UART device
-    unsigned int baud_divisor;
-    unsigned int uartclk;
+   
 
     of_property_read_u32(pdev->dev.of_node, "clock-frequency", &uartclk);
 
@@ -315,7 +335,7 @@ static int hw_probe(struct platform_device *pdev)
     dev->mDev.name = devm_kasprintf(&pdev->dev, GFP_KERNEL, "hw_serial-%x", res->start);
     dev->mDev.fops = &hw_fops;
 
-    int error = misc_register(&dev->mDev);
+    error = misc_register(&dev->mDev);
     if (error)
     {
         pr_err("%s: misc register failed.", __func__);
@@ -333,8 +353,9 @@ static int hw_probe(struct platform_device *pdev)
 /*********************************************************/
 static int hw_remove(struct platform_device *pdev)
 {
+    struct hw_serial_dev *dev ;
     pm_runtime_disable(&pdev->dev);
-    struct hw_serial_dev *dev = dev_get_drvdata(&pdev->dev);
+    dev = dev_get_drvdata(&pdev->dev);
     misc_deregister(&dev->mDev);
     return 0;
 }
