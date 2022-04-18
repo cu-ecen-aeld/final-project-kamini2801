@@ -1,3 +1,8 @@
+/*
+*   Reference: 
+*
+*/
+
 #include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -48,7 +53,7 @@ int main()
    
     // assign IP, PORT
     servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = inet_addr("128.138.189.132");
+    servaddr.sin_addr.s_addr = inet_addr("10.0.0.181");
     servaddr.sin_port = htons(PORT);
    
     // connect the client socket to server socket
