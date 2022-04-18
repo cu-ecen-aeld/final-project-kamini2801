@@ -125,6 +125,7 @@ static struct platform_driver hw_plat_driver = {
 /*********************************************************/
 static int hw_open(struct inode *inode, struct file *file)
 { 
+    printk(KERN_DEBUG "Opened UART");
     return 0;
 }
 /*********************************************************/
@@ -143,6 +144,7 @@ static ssize_t hw_read(struct file *file, char __user *buf, size_t size, loff_t 
         
 
     ret = read_circ_buff(dev);
+    printk(KERN_DEBUG "Character read from buffer:%c\n", ret);
     ret_err = copy_to_user(buf, &ret, 1);
     if(ret_err < 0)
     {
