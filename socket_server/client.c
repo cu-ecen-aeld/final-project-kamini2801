@@ -1,10 +1,14 @@
 /*
+<<<<<<< Updated upstream
 *   
 *   File:       client.c
 *   Brief:      Test code to run cleint on BBB
 *   Author:     Kamini Budke Sanish Kharade
 *   Date:       04-10-2022
 *   Reference:  https://github.com/cu-ecen-aeld/Smart-Car-Dashboard/blob/main/sockettest/client.c
+=======
+*   Reference: https://github.com/cu-ecen-aeld/Smart-Car-Dashboard/blob/main/sockettest/client.c
+>>>>>>> Stashed changes
 *
 */
 
@@ -19,7 +23,6 @@
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <errno.h>
-
 #define MAX 80
 #define PORT 8080
 #define SA struct sockaddr

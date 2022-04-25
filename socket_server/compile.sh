@@ -1,3 +1,5 @@
-make CROSS_COMPILE=arm-linux-gnueabihf- server
+FILES="server client aesd-application"
 
-#scp server root@192.168.0.2:/usr/bin
+make CROSS_COMPILE=arm-linux-gnueabihf- ${FILES}
+
+scp ${FILES} ip update_ip.sh root@128.138.189.42:/usr/bin/aesd-project/

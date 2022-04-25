@@ -1,18 +1,3 @@
-/**
- * @file    :   server.c
- * @brief   :   This is the server code for AESD project. It reads data from the client and turns ON
- *              the respective LED.
- *              
- * @author  :   Sanish Kharade, Kamini Budke
- * @date    :   April 10
- * 
- * 
- * @link    :   For all functions - man pages and Linux System Programming book
- * 				Socket functions - https://beej.us/guide/bgnet/html/
- *              Reference - https://github.com/cu-ecen-aeld/Smart-Car-Dashboard/blob/main/sockettest/server.c 
- * 				
-*/
-
 #include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,23 +12,18 @@
 #include <fcntl.h>  	// for open
 #include <errno.h>		// for errno
 
+
 #define MAX 80
-#define PORT "8080"
-#define PORT_INT 8080
+#define PORT 8080
 #define SA struct sockaddr
-
-#define PIN_66 "66"
-#define PIN_67 "67"
-
-#define PASSWORD "1234"
 
 char *gpio_pin;
 
-const char *output = "out";
-const char *input = "in";
- 
-const char *high = "1";
-const char *low = "0";
+char *output = "out";
+char *input = "in";
+
+char *high = "1";
+char *low = "0";
 
 /**
  * @brief   :   Signal Handler function
@@ -69,20 +49,19 @@ static void signal_handler (int signo)
 	}
     int fd = 0;
     int bytes_written = 0;
-    
     fd = open("/sys/class/gpio/unexport", O_WRONLY);
     if( fd == -1)
 	{
         printf("ERROR: open unexport() : %s \n", strerror(errno));
 	}
 
-    bytes_written = write(fd, PIN_67, 2);
+    bytes_written = write(fd, "67", 2);
     if( bytes_written == -1)
 	{
         printf("ERROR: unexport 67() : %s \n", strerror(errno));
 	}
 
-    bytes_written = write(fd, PIN_66, 2);
+    bytes_written = write(fd, "66", 2);
     if( bytes_written == -1)
 	{
         printf("ERROR: unexport 66() : %s \n", strerror(errno));
@@ -91,14 +70,7 @@ static void signal_handler (int signo)
     exit(EXIT_SUCCESS);
 
 }  
-/**
- * @brief   :   Function to configure the GPIOs
- *              
- * @param   :   none
- * 
- * @return  :   void
- * 
-*/
+
 void configureGPIOs(void)
 {
     int fd = 0;
@@ -109,16 +81,16 @@ void configureGPIOs(void)
         printf("ERROR: open export() : %s \n", strerror(errno));
 	}
     // green led
-    gpio_pin = PIN_67;
-    bytes_written = write(fd, PIN_67, 2);
+    gpio_pin = "67";
+    bytes_written = write(fd, "67", 2);
     if( bytes_written == -1)
     {
         printf("ERROR: write export 67() : %s \n", strerror(errno));
     }
 
     // red led
-    gpio_pin = PIN_66;
-    bytes_written = write(fd, PIN_66, 2);
+    gpio_pin = "66";
+    bytes_written = write(fd, "66", 2);
     if( bytes_written == -1)
     {
         printf("ERROR: write export 66() : %s \n", strerror(errno));
@@ -127,7 +99,7 @@ void configureGPIOs(void)
 
     // set direction for the LEDs
 
-    // green led
+    // gren led
     fd = open("/sys/class/gpio/gpio67/direction", O_WRONLY);
     if( fd == -1)
     {
@@ -156,19 +128,10 @@ void configureGPIOs(void)
     close(fd);
 }
 
-/**
- * @brief   :   Function to turn ON Green LED
- *              
- * @param   :   none
- * 
- * @return  :   void
- * 
-*/
 void GreenLED_ON(void)
 {
     int fd = 0;
     int bytes_written = 0;
-
     fd = open("/sys/class/gpio/gpio67/value", O_WRONLY);
     if( fd == -1)
     {
@@ -182,15 +145,6 @@ void GreenLED_ON(void)
     }
     close(fd);
 }
-
-/**
- * @brief   :   Function to turn OFF Green LED
- *              
- * @param   :   none
- * 
- * @return  :   void
- * 
-*/
 void GreenLED_OFF(void)
 {
     int fd = 0;
@@ -209,15 +163,6 @@ void GreenLED_OFF(void)
 
     close(fd);
 }
-
-/**
- * @brief   :   Function to turn ON Red LED
- *              
- * @param   :   none
- * 
- * @return  :   void
- * 
-*/
 void RedLED_ON(void)
 {
     int fd = 0;
@@ -236,15 +181,6 @@ void RedLED_ON(void)
     close(fd);
 
 }
-
-/**
- * @brief   :   Function to turn OFF Red LED
- *              
- * @param   :   none
- * 
- * @return  :   void
- * 
-*/
 void RedLED_OFF(void)
 {
     int fd = 0;
@@ -263,30 +199,22 @@ void RedLED_OFF(void)
 
     close(fd);
 }
-/**
- * @brief   :   Function to communicate with client
- *              
- * @param   :   sockfd - socket file descriptor
- * 
- * @return  :   void
- * 
-*/
+// Function designed for chat between client and server.
 void func(int sockfd)
 {
     char buff[MAX];
     char *str;
-
-    // infinite loop for communication
+    //int n;
+    // infinite loop for chat
     for (;;) {
         bzero(buff, MAX);
    
         // read the message from client and copy it in buffer
         read(sockfd, buff, sizeof(buff));
-
         // print buffer which contains the client contents
         printf("Client input = %s\n", buff);
 
-        if(strncmp(buff, PASSWORD, 4) == 0)
+        if(strncmp(buff, "1234", 4) == 0)
         {
             GreenLED_ON();
             RedLED_OFF();
@@ -299,6 +227,15 @@ void func(int sockfd)
             str = "Access Denied\n";
         }
 
+        
+        // bzero(buff, MAX);
+        // n = 0;
+        // // copy server message in the buffer
+        // while ((buff[n++] = getchar()) != '\n')
+        //     ;
+   
+        // and send that buffer to client
+        //write(sockfd, buff, sizeof(buff));
         write(sockfd, str, strlen(str));
         // if msg contains "Exit" then server exit and chat ended.
         if (strncmp("exit", buff, 4) == 0) {
@@ -308,15 +245,8 @@ void func(int sockfd)
     }
 }
    
-/**
- * @brief   :   Main entry point into the application
- *              
- * @param   :   none
- * 
- * @return  :   void
- * 
-*/
-int main(void)
+// Driver function
+int main()
 {
     int sockfd, connfd, len;
     struct sockaddr_in servaddr, cli;
@@ -339,56 +269,28 @@ int main(void)
 	}
 
     configureGPIOs();
+    // socket create and verification
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd == -1) {
+        printf("socket creation failed...\n");
+        exit(0);
+    }
+    else
+        printf("Socket successfully created..\n");
+    bzero(&servaddr, sizeof(servaddr));
    
     // assign IP, PORT
     servaddr.sin_family = AF_INET;
     servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    servaddr.sin_port = htons(PORT_INT);
+    servaddr.sin_port = htons(PORT);
    
-
-	/* getaddrinfo() returns a list of address structures.
-	  Try each address until we successfully bind.
-	  If socket (or bind) fails, we (close the socket
-	  and) try the next address.
-	  Ref -  man page of getaddrinfo
-	 */
-	//syslog(LOG_DEBUG, "Attempting to Bind\n");
-	int status;
-    struct addrinfo hints;
-	struct addrinfo *result, *rp;
-
-	memset(&hints, 0, sizeof(hints));
-	hints.ai_family = AF_INET;
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_flags = AI_PASSIVE;
-
-	status = getaddrinfo(NULL, PORT, &hints, &result);
-	if(status != 0)
-	{
-		//syslog(LOG_ERR, "ERROR: getaddrinfo() : %s\n", gai_strerror(status));
-		exit(EXIT_FAILURE);
-	}
-	for (rp = result; rp != NULL; rp = rp->ai_next)
-	{
-		sockfd = socket(AF_INET, SOCK_STREAM, 0);
-		if (sockfd == -1)
-		{
-			/* socket() failed */
-			exit(EXIT_FAILURE);
-		}
-		if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) < 0)
-    	{
-        	exit(EXIT_FAILURE);
-    	}
-		bzero(&servaddr, sizeof(servaddr));
-		if (bind(sockfd, rp->ai_addr, rp->ai_addrlen) == 0)
-		{
-			/* Successfully bound to socket */
-			break;                  
-		}
-	
-		close(sockfd);
-	}
+    // Binding newly created socket to given IP and verification
+    if ((bind(sockfd, (SA*)&servaddr, sizeof(servaddr))) != 0) {
+        printf("socket bind failed...\n");
+        exit(0);
+    }
+    else
+        printf("Socket successfully binded..\n");
    
     // Now server is ready to listen and verification
     if ((listen(sockfd, 5)) != 0) {
