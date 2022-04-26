@@ -1,3 +1,13 @@
+/*
+*   
+*   File:       aesd-application.c
+*   Brief:      Application to run and accept input pn custom UART on the client side
+*   Author:     Kamini Budke Sanish Kharade
+*   Date:       04-14-2022
+*   Reference:  https://github.com/cu-ecen-aeld/assignments-3-and-later-kamini2801/blob/master/server/aesdsocket.c
+*
+*/
+
 #include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,9 +19,11 @@
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <errno.h>
+
 #define MAX 80
 #define PORT 8080
 #define SA struct sockaddr
+#define IP_PATH "ip"
 
 const char* UART = "/dev/hw_serial-481a8000";
 const char* init_print = "Please enter password to login into System\n";
@@ -19,7 +31,16 @@ const char* password = "Enter password:\n";
 
 int uart_fd = -1;
    
-// Function designed for chat between client and server.
+char ip[16];
+
+/**
+ * @brief   :   task for accepting input from UART and communicating with server
+ *              
+ * @param   :   socket file descriptor
+ *
+ * @return  :   void
+ * 
+*/
 void func(int sockfd)
 {
     char buff[MAX];
@@ -27,46 +48,62 @@ void func(int sockfd)
     int n;
     for (;;) {
         bzero(buff, sizeof(buff));
-        // printf("Enter the string on UART: \n");
-        
+                
         n = 0;
-        int bytes_read = 0;
+        int bytes_read, bytes_write = 0;
         int str_size = 0;
-        write(uart_fd, password, strlen(password));
+
+        bytes_write = write(uart_fd, password, strlen(password));
+        if( bytes_write == -1)
+        {
+            printf("ERROR: uart write() :%s\n", strerror(errno)); 
+        }
         do
         {
-            
             bytes_read = read(uart_fd, &buff[n], 1);
-            if(bytes_read <= 0) printf("Error read: %s", strerror(errno));
-            //printf("Value char:%c\n", buff[n]);
-            write(uart_fd, &buff[n], 1);
+            if( bytes_read == -1)
+            {
+                printf("ERROR: uart read() :%s\n", strerror(errno)); 
+            }
+
+            bytes_write = write(uart_fd, &buff[n], 1);
+            if( bytes_write == -1)
+            {
+                printf("ERROR: uart write() :%s\n", strerror(errno)); 
+            }
             str_size++;
+
         }while (buff[n++] != '\r');
 
         printf("String:%s\n", buff);
 
         //send to socket
         int ret_wrt = write(sockfd, buff, sizeof(buff));
-        if(ret_wrt < 0) printf("write socket error: %s", strerror(errno));
+        if(ret_wrt < 0) {
+            printf("write socket error: %s", strerror(errno));
+        }
         printf("Write success with %d bytes\n", ret_wrt);
         
         //read from socket
         bzero(buff, sizeof(buff));
         int sock_len = read(sockfd, buff, sizeof(buff));
+        if( sock_len < 0){
+            printf("read socket error: %s", strerror(errno));
+        }
+
         printf("From Server : %s", buff);  
         write(uart_fd, buff, sock_len);      
-        // if ((strncmp(buff, "exit", 4)) == 0) {
-        //     printf("Client Exit...\n");
-        //     break;
-        // }
+
     } 
 }
    
-// Driver function
+
 int main()
 {
 
     int sockfd = 0;
+    int n_read = 0;
+    int byte_write = 0;
     struct sockaddr_in servaddr;
    
     // socket create and varification
@@ -79,9 +116,25 @@ int main()
         printf("Socket successfully created..\n");
     bzero(&servaddr, sizeof(servaddr));
    
+    //get ip from configuration text file
+    int ip_fd = open(IP_PATH,O_RDONLY);
+    if(ip_fd == -1)
+    {
+        printf("ERROR: open() :%s\n", strerror(errno));
+    }
+
+    while((n_read = read(ip_fd, ip, sizeof(ip) ))!=0)
+    {
+        if(n_read == -1)
+        {
+            printf("ERROR: read() :%s\n", strerror(errno));
+        }
+    }
+    close(ip_fd);
+
     // assign IP, PORT
     servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = inet_addr("128.138.189.132");
+    servaddr.sin_addr.s_addr = inet_addr(ip);
     servaddr.sin_port = htons(PORT);
    
     // connect the client socket to server socket
@@ -90,24 +143,27 @@ int main()
         exit(0);
     }
     else
-        printf("connected to the server..\n");
+        printf("connected to the server\n");
 
     //Open uart device
     uart_fd = open(UART, O_RDWR);
 
     if(uart_fd < 0) {
-        printf("Open UART failed with error : %d\n", uart_fd);
+        printf("Open UART failed with error : %s\n", strerror(errno));
         //exit(-1);
     }
 
-    write(uart_fd, init_print, strlen(init_print));
+    byte_write = write(uart_fd, init_print, strlen(init_print));
+    if(byte_write < 0){
+        printf("UART init write failed with error : %s\n", strerror(errno));
+    }
 
     // function for chat
-    printf("Open UART succeeded");
+    printf("Open UART succeeded, enter in UART terminal\n");
     func(sockfd);
    
     // close the socket
     close(sockfd);
     
 
-}
+}   
